@@ -13,6 +13,7 @@ import {
   ScrollView,
   Pressable,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import LottieView from 'lottie-react-native';
 import * as Haptics from 'expo-haptics';
@@ -20,6 +21,8 @@ import { Checkbox } from 'expo-checkbox';
 import { useForm, Controller } from 'react-hook-form';
 import { AntDesign, FontAwesome, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
+import { supabase } from '@/lib/supabase';
 
 import joinLottie from '@/assets/lottie/Signup.json';
 
@@ -91,6 +94,7 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
   const router = useRouter();
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
+  const [socialLoading, setSocialLoading] = useState<'google' | 'github' | 'apple' | null>(null);
 
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(24)).current;
@@ -119,7 +123,6 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
   const onSubmit = handleSubmit(async (data) => {
     try {
       if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const { supabase } = await import('@/lib/supabase');
       const { error } = await supabase.auth.signUp(
         { email: data.email, password: data.password },
         { data: { full_name: data.fullName } }
@@ -147,9 +150,25 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
     else router.replace('/onboard');
   };
 
+  // --- REAL SOCIAL LOGIN (Google, GitHub, Apple) ---
   const handleSocialLogin = async (provider: 'google' | 'apple' | 'github') => {
     if (Platform.OS !== 'web') await Haptics.selectionAsync();
-    alert(`Social login via ${provider} not implemented`);
+    setSocialLoading(provider);
+    try {
+      const redirectTo = Linking.createURL('auth/callback');
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo }
+      });
+      if (error) {
+        alert(error.message);
+      }
+      // Supabase will handle the redirect/session automatically!
+    } catch (err) {
+      alert('Authentication error. Please try again.');
+    } finally {
+      setSocialLoading(null);
+    }
   };
 
   return (
@@ -158,17 +177,16 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
       <AnimatedPressable onPress={onBackPress} accessibilityLabel="Go back to onboarding" style={styles.backButton}>
         <AntDesign name="arrowleft" size={28} color="#222B2B" />
       </AnimatedPressable>
-<KeyboardAvoidingView
-  style={{ flex: 1 }}
-  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-  keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20} // adjust offset to your header/status bar height
->
-  <ScrollView
-    contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 120 }]} 
-    keyboardShouldPersistTaps="handled"
-    showsVerticalScrollIndicator={false}
-  >
-
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 120 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Animated.View style={[styles.formBody, { opacity, transform: [{ translateY }] }]}>
             <View style={styles.lottieContainer}>
               <LottieView source={joinLottie} autoPlay loop resizeMode="contain" style={styles.lottie} accessibilityRole="image" />
@@ -178,6 +196,7 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
             <Text style={styles.subtitle}>Join ProFlash and boost your productivity</Text>
 
             <Animated.View style={{ opacity }}>
+              {/* Full Name */}
               <Controller
                 control={control}
                 name="fullName"
@@ -201,6 +220,7 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
             </Animated.View>
 
             <Animated.View style={{ opacity }}>
+              {/* Email */}
               <Controller
                 control={control}
                 name="email"
@@ -228,6 +248,7 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
             </Animated.View>
 
             <Animated.View style={{ opacity }}>
+              {/* Password */}
               <Controller
                 control={control}
                 name="password"
@@ -287,22 +308,49 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
             </Animated.View>
 
             <AnimatedPressable onPress={onSubmit} style={styles.joinButton} accessibilityLabel="Create account" disabled={isSubmitting}>
-              <Text style={styles.joinButtonText}>{isSubmitting ? 'Signing up...' : 'Sign Up'}</Text>
+              <Text style={styles.joinButtonText}>
+                {isSubmitting ? 'Signing up...' : 'Sign Up'}
+              </Text>
             </AnimatedPressable>
 
             <Text style={styles.socialSeparator}>or continue with</Text>
 
             <Animated.View style={{ opacity }}>
               <View style={styles.socialRow}>
-                <AnimatedPressable onPress={() => handleSocialLogin('google')} accessibilityLabel="Sign up with Google" style={styles.socialButton}>
-                  <AntDesign name="google" size={28} color="#EA4335" />
+                <AnimatedPressable
+                  onPress={() => handleSocialLogin('google')}
+                  accessibilityLabel="Sign up with Google"
+                  style={styles.socialButton}
+                  disabled={socialLoading !== null}
+                >
+                  {socialLoading === 'google'
+                    ? <ActivityIndicator color="#EA4335" />
+                    : <AntDesign name="google" size={28} color="#EA4335" />
+                  }
                 </AnimatedPressable>
-                <AnimatedPressable onPress={() => handleSocialLogin('github')} accessibilityLabel="Sign up with GitHub" style={styles.socialButton}>
-                  <AntDesign name="github" size={28} color="#171515" />
+
+                <AnimatedPressable
+                  onPress={() => handleSocialLogin('github')}
+                  accessibilityLabel="Sign up with GitHub"
+                  style={styles.socialButton}
+                  disabled={socialLoading !== null}
+                >
+                  {socialLoading === 'github'
+                    ? <ActivityIndicator color="#171515" />
+                    : <AntDesign name="github" size={28} color="#171515" />
+                  }
                 </AnimatedPressable>
                 {Platform.OS === 'ios' && (
-                  <AnimatedPressable onPress={() => handleSocialLogin('apple')} accessibilityLabel="Sign up with Apple" style={styles.socialButton}>
-                    <FontAwesome name="apple" size={28} color="#000" />
+                  <AnimatedPressable
+                    onPress={() => handleSocialLogin('apple')}
+                    accessibilityLabel="Sign up with Apple"
+                    style={styles.socialButton}
+                    disabled={socialLoading !== null}
+                  >
+                    {socialLoading === 'apple'
+                      ? <ActivityIndicator color="#000" />
+                      : <FontAwesome name="apple" size={28} color="#000" />
+                    }
                   </AnimatedPressable>
                 )}
               </View>
@@ -327,9 +375,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 24, 
+    paddingTop: 24,
     paddingHorizontal: 18,
-         paddingBottom: 120,
+    paddingBottom: 120,
     justifyContent: 'flex-start',
   },
   formBody: {
