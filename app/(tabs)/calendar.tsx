@@ -10,7 +10,7 @@ import emptyCalendarLottie from '@/assets/lottie/Empty.json';
 const PRIMARY = '#157efb';
 
 export default function CalendarScreen() {
-  const [events, setEvents] = useState([]); // Empty list = show empty state
+  const [events] = useState([]); // Empty list = show empty state
 
   const handleAddEvent = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
