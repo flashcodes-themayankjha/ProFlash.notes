@@ -4,6 +4,17 @@ import { Slot, useRouter, usePathname } from 'expo-router';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { supabase } from '@/lib/supabase'; // Your properly configured Supabase client
+import AuthProvider from '@/components/AuthProvider';
+
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 
 function Splash() {
   // Simple splash/loading screen while checking session & onboarding
@@ -44,11 +55,17 @@ export default function RootLayout() {
 
       // User authenticated -> allow access to main app
       setReady(true);
+
+      // Request notification permissions
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Failed to get push token for push notification!');
+      }
     })();
   }, [pathname, router]);
 
   // Prevent render of child routes until ready
-  return ready ? <Slot /> : <Splash />;
+  return ready ? <AuthProvider><Slot /></AuthProvider> : <Splash />;
 }
 
 const styles = StyleSheet.create({
