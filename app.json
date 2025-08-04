@@ -4,7 +4,7 @@
     "slug": "ProFlash",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/adaptive-icon.png",
     "scheme": "proflash",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -12,8 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.ProFlash",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+        "ITSAppUsesNonExemptEncryption": false }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,14 +25,14 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/splash-dark.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-dark.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
