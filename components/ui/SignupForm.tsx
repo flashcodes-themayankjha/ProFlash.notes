@@ -109,7 +109,7 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [opacity, translateY]);
 
   const { control, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<SignupFormData>({
     defaultValues: {
@@ -134,8 +134,8 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
       alert('Account created successfully! Please verify your email before logging in.');
       onSubmitSuccess?.();
       router.replace('/login');
-    } catch (err: any) {
-      setError('email', { type: 'manual', message: err.message || 'An unexpected error occurred.' });
+    } catch {
+      setError('email', { type: 'manual', message: 'An unexpected error occurred.' });
     }
   });
 
@@ -164,7 +164,7 @@ const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
         alert(error.message);
       }
       // Supabase will handle the redirect/session automatically!
-    } catch (err) {
+    } catch {
       alert('Authentication error. Please try again.');
     } finally {
       setSocialLoading(null);
