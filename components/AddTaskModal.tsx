@@ -4,35 +4,47 @@ import {
   View,
   Text,
   Modal,
-  StyleSheet,
   TextInput,
   TouchableOpacity,
-  Platform,
   KeyboardAvoidingView,
-  TouchableWithoutFeedback,
-  Keyboard,
+  Platform,
   ScrollView,
+  StyleSheet,
   Animated,
   Easing,
+  TouchableWithoutFeedback,
+  Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react';
+import TagSelector from './TagSelector'; // Make sure this works or inline your TagSelector
 
-const PREDEFINED_TAGS = ['Work', 'Personal', 'Urgent', 'Reading', 'Shopping', 'Fitness'];
 const REPETITION_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly'];
 
-export default function AddTaskModal({ visible, onClose, onSave }) {
-  // --- Form States ---
+type AddTaskModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  onSaved?: () => void;
+};
+
+export default function AddTaskModal({ visible, onClose, onSaved }: AddTaskModalProps) {
+  const user = useUser();
+  const supabase = useSupabaseClient();
+
+  // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState(null);
-  const [reminderDate, setReminderDate] = useState(null);
-  const [tags, setTags] = useState([]);
-  const [repetition, setRepetition] = useState('None');
+  const [dueDate, setDueDate] = useState<Date | null>(null);
+  const [reminderDate, setReminderDate] = useState<Date | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const [repetition, setRepetition] = useState<'None' | 'Daily' | 'Weekly' | 'Monthly'>('None');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // --- Picker Dialog States (date/time two-step) ---
+  // Picker control state
   const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const [showDueTimePicker, setShowDueTimePicker] = useState(false);
   const [pendingDueDate, setPendingDueDate] = useState(new Date());
@@ -50,27 +62,61 @@ export default function AddTaskModal({ visible, onClose, onSave }) {
     setError('');
   };
 
-  const handleSave = () => {
+  async function saveTaskToSupabase() {
+    if (!user || !user.id) {
+      setError('You must be signed in to save tasks.');
+      return false;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.from('tasks').insert([
+        {
+          user_id: user.id,
+          title: title.trim(),
+          description: description.trim() || null,
+          due_date: dueDate?.toISOString() || null,
+          reminder: reminderDate?.toISOString() || null,
+          tags: tags.length ? tags : null,
+          repetition: repetition === 'None' ? null : repetition,
+          completed: false,
+        },
+      ]);
+      if (error) throw error;
+      return true;
+    } catch (err: any) {
+      setError(err.message || 'Failed to save task.');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleSave = async () => {
     if (!title.trim()) {
       setError('Task title is required.');
       return;
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onSave({
-      title: title.trim(),
-      description: description.trim() || undefined,
-      dueDate,
-      reminder: reminderDate,
-      tags: tags.length ? tags : undefined,
-      repetition: repetition !== 'None' ? repetition : undefined,
-    });
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const success = await saveTaskToSupabase();
+    if (success) {
+      resetForm();
+      onClose();
+      if (onSaved) onSaved();
+    }
+  };
+
+  const handleCancel = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     resetForm();
     onClose();
   };
 
-  // --- Due Picker: Date → Time, Android-safe ---
-  const handleDueDateChange = (_event, selectedDate) => {
-    if (_event.type === 'dismissed') return setShowDueDatePicker(false);
+  // Date/time pickers unchanged...
+  const onDueDateChange = (event: any, selectedDate?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowDueDatePicker(false);
+      return;
+    }
     if (selectedDate) {
       setPendingDueDate(
         new Date(
@@ -82,28 +128,32 @@ export default function AddTaskModal({ visible, onClose, onSave }) {
         )
       );
       setShowDueDatePicker(false);
-      setTimeout(() => setShowDueTimePicker(true), 100);
+      setTimeout(() => setShowDueTimePicker(true), 120);
     }
   };
-  const handleDueTimeChange = (_event, selectedTime) => {
-    if (_event.type === 'dismissed') return setShowDueTimePicker(false);
+  const onDueTimeChange = (event: any, selectedTime?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowDueTimePicker(false);
+      return;
+    }
     if (selectedTime) {
-      const base = pendingDueDate || new Date();
-      const final = new Date(
-        base.getFullYear(),
-        base.getMonth(),
-        base.getDate(),
-        selectedTime.getHours(),
-        selectedTime.getMinutes()
+      setDueDate(
+        new Date(
+          pendingDueDate.getFullYear(),
+          pendingDueDate.getMonth(),
+          pendingDueDate.getDate(),
+          selectedTime.getHours(),
+          selectedTime.getMinutes()
+        )
       );
-      setDueDate(final);
     }
     setShowDueTimePicker(false);
   };
-
-  // --- Reminder Picker: Date → Time ---
-  const handleReminderDateChange = (_event, selectedDate) => {
-    if (_event.type === 'dismissed') return setShowReminderDatePicker(false);
+  const onReminderDateChange = (event: any, selectedDate?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowReminderDatePicker(false);
+      return;
+    }
     if (selectedDate) {
       setPendingReminderDate(
         new Date(
@@ -115,175 +165,42 @@ export default function AddTaskModal({ visible, onClose, onSave }) {
         )
       );
       setShowReminderDatePicker(false);
-      setTimeout(() => setShowReminderTimePicker(true), 100);
+      setTimeout(() => setShowReminderTimePicker(true), 120);
     }
   };
-  const handleReminderTimeChange = (_event, selectedTime) => {
-    if (_event.type === 'dismissed') return setShowReminderTimePicker(false);
+  const onReminderTimeChange = (event: any, selectedTime?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowReminderTimePicker(false);
+      return;
+    }
     if (selectedTime) {
-      const base = pendingReminderDate || new Date();
-      const final = new Date(
-        base.getFullYear(),
-        base.getMonth(),
-        base.getDate(),
-        selectedTime.getHours(),
-        selectedTime.getMinutes()
+      setReminderDate(
+        new Date(
+          pendingReminderDate.getFullYear(),
+          pendingReminderDate.getMonth(),
+          pendingReminderDate.getDate(),
+          selectedTime.getHours(),
+          selectedTime.getMinutes()
+        )
       );
-      setReminderDate(final);
     }
     setShowReminderTimePicker(false);
   };
 
-  // --- TagSelector (custom + rotate animation) ---
-  function TagSelector({ tags, setTags }) {
-    const [showInput, setShowInput] = useState(false);
-    const [input, setInput] = useState('');
-    const rotateAnim = useRef(new Animated.Value(0)).current;
-
-    const toggleInput = () => {
-      if (!showInput) {
-        Animated.timing(rotateAnim, {
-          toValue: 1,
-          duration: 210,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }).start();
-        setShowInput(true);
-      } else {
-        Animated.timing(rotateAnim, {
-          toValue: 0,
-          duration: 180,
-          easing: Easing.in(Easing.ease),
-          useNativeDriver: true,
-        }).start();
-        setShowInput(false);
-        setInput('');
-      }
-    };
-
-    const handleAdd = () => {
-      const trimmed = input.trim();
-      if (trimmed && !tags.includes(trimmed)) {
-        setTags([...tags, trimmed]);
-        setInput('');
-        setShowInput(false);
-        Animated.timing(rotateAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }).start();
-      }
-    };
-
-    const removeTag = (tag) => setTags(tags.filter((t) => t !== tag));
-    const togglePredef = (tag) =>
-      tags.includes(tag)
-        ? setTags(tags.filter((t) => t !== tag))
-        : setTags([...tags, tag]);
-
-    return (
-      <View style={{ marginBottom: 10 }}>
-        <Text style={addTagStyles.label}>Tags:</Text>
-        <View style={addTagStyles.tagsRow}>
-          {/* Predefined Chips */}
-          {PREDEFINED_TAGS.map((tag) => (
-            <TouchableOpacity
-              key={tag}
-              onPress={() => togglePredef(tag)}
-              style={[addTagStyles.chip, tags.includes(tag) && addTagStyles.chipActive]}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: tags.includes(tag) }}
-            >
-              <Text
-                numberOfLines={1}
-                style={[addTagStyles.chipText, tags.includes(tag) && addTagStyles.chipTextActive]}
-              >
-                {tag}
-              </Text>
-            </TouchableOpacity>
-          ))}
-          {/* Custom Chips */}
-          {tags.filter(t => !PREDEFINED_TAGS.includes(t)).map((tag) => (
-            <View key={tag} style={[addTagStyles.chip, addTagStyles.chipActive, { flexDirection: 'row' }]}>
-              <Text style={[addTagStyles.chipText, addTagStyles.chipTextActive]} numberOfLines={1}>{tag}</Text>
-              <TouchableOpacity
-                onPress={() => removeTag(tag)}
-                style={addTagStyles.removeIcon}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove tag ${tag}`}
-                hitSlop={7}
-              >
-                <Ionicons name="close" size={12} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          ))}
-          {/* Add Tag Chip - Animate +/cross */}
-          <TouchableOpacity
-            onPress={toggleInput}
-            style={[addTagStyles.chip, addTagStyles.addChip]}
-            accessibilityRole="button"
-            accessibilityLabel={showInput ? "Cancel custom tag input" : "Add custom tag"}
-          >
-            <Animated.View
-              style={{
-                transform: [
-                  {
-                    rotate: rotateAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0deg', '135deg'],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <Ionicons name="add" size={16} color="#157efb" />
-            </Animated.View>
-          </TouchableOpacity>
-          {/* Inline input appears next to button */}
-          {showInput && (
-            <TextInput
-              style={addTagStyles.tagInput}
-              value={input}
-              autoFocus
-              placeholder="Tag name"
-              maxLength={16}
-              onChangeText={setInput}
-              onBlur={toggleInput}
-              onSubmitEditing={handleAdd}
-              accessibilityLabel="Enter custom tag"
-              returnKeyType="done"
-            />
-          )}
-        </View>
-      </View>
-    );
-  }
+  // UI ------------------------
 
   return (
-    <Modal
-      animationType="fade"
-      transparent
-      visible={visible}
-      onRequestClose={() => {
-        resetForm();
-        onClose();
-      }}
-    >
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.backdrop}>
-          <KeyboardAvoidingView
-            style={styles.modalContainer}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-          >
+          <KeyboardAvoidingView style={styles.modalContainer} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 16 }}>
               <Text style={styles.title}>Add New Task</Text>
               <TextInput
-                style={[styles.input, error ? styles.inputError : null]}
-                placeholder="Task Title*"
+                style={[styles.input, error ? styles.errorInput : null]}
                 value={title}
-                onChangeText={text => { setTitle(text); if (error) setError(''); }}
-                accessibilityLabel="Task Title"
+                placeholder="Task Title*"
+                onChangeText={setTitle}
                 autoFocus
                 maxLength={80}
                 returnKeyType="done"
@@ -292,125 +209,99 @@ export default function AddTaskModal({ visible, onClose, onSave }) {
 
               <TextInput
                 style={[styles.input, styles.multilineInput]}
-                placeholder="Description (optional)"
                 value={description}
+                placeholder="Description (optional)"
                 onChangeText={setDescription}
-                accessibilityLabel="Task Description"
                 multiline
                 numberOfLines={3}
-                maxLength={200}
-                textAlignVertical="top"
                 returnKeyType="default"
+                textAlignVertical="top"
               />
 
-              {/* Due Date & Reminder - Compact Row */}
               <View style={styles.rowCompact}>
+                {/* Due Date */}
                 <TouchableOpacity
-                  onPress={() => { setPendingDueDate(dueDate || new Date()); setShowDueDatePicker(true); }}
-                  style={[styles.chipBtn, dueDate && styles.chipBtnActive]}
+                  onPress={() => {
+                    setPendingDueDate(dueDate ?? new Date());
+                    setShowDueDatePicker(true);
+                  }}
+                  style={[styles.chip, dueDate ? styles.chipActive : null]}
                   accessibilityRole="button"
                   accessibilityLabel="Select due date"
+                  onPressOut={() => Haptics.selectionAsync()}
                 >
-                  <Ionicons name="calendar-outline" size={18} color={dueDate ? '#157efb' : '#888'} style={{ marginRight: 6 }} />
-                  <Text style={[styles.chipBtnText, dueDate && { color: '#157efb' }]}>
-                    {dueDate
-                      ? dueDate.toLocaleDateString([], { dateStyle: 'short' }) + ', ' + dueDate.toLocaleTimeString([], { timeStyle: 'short' })
-                      : 'Due Date'}
+                  <Ionicons name="calendar-outline" size={18} color={dueDate ? '#fff' : '#157efb'} style={{ marginRight: 6 }} />
+                  <Text style={[styles.chipText, dueDate ? { color: '#fff' } : { color: '#157efb' }]} numberOfLines={1}>
+                    {dueDate ? dueDate.toLocaleDateString() + ', ' + dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Due Date'}
                   </Text>
                   {dueDate && (
-                    <TouchableOpacity
-                      onPress={() => setDueDate(null)}
-                      accessibilityRole="button"
-                      accessibilityLabel="Clear due date"
-                      style={styles.clearIcon}
-                      hitSlop={8}
-                    >
-                      <Ionicons name="close-circle" size={18} color="#e44" />
+                    <TouchableOpacity onPress={() => { setDueDate(null); Haptics.selectionAsync(); }} style={styles.clearIcon} accessibilityLabel="Clear due date" accessibilityRole="button" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Ionicons name="close" size={16} color="#fff" />
                     </TouchableOpacity>
                   )}
                 </TouchableOpacity>
+                {/* Reminder */}
                 <TouchableOpacity
-                  onPress={() => { setPendingReminderDate(reminderDate || new Date()); setShowReminderDatePicker(true); }}
-                  style={[styles.chipBtn, reminderDate && styles.chipBtnActive]}
+                  onPress={() => {
+                    setPendingReminderDate(reminderDate ?? new Date());
+                    setShowReminderDatePicker(true);
+                  }}
+                  style={[styles.chip, reminderDate ? styles.chipActive : null]}
                   accessibilityRole="button"
-                  accessibilityLabel="Set reminder date and time"
+                  accessibilityLabel="Select reminder"
+                  onPressOut={() => Haptics.selectionAsync()}
                 >
-                  <Ionicons name="alarm-outline" size={18} color={reminderDate ? '#157efb' : '#888'} style={{ marginRight: 6 }} />
-                  <Text style={[styles.chipBtnText, reminderDate && { color: '#157efb' }]}>
-                    {reminderDate
-                      ? reminderDate.toLocaleDateString([], { dateStyle: 'short' }) + ', ' + reminderDate.toLocaleTimeString([], { timeStyle: 'short' })
-                      : 'Reminder'}
+                  <Ionicons name="alarm-outline" size={18} color={reminderDate ? '#fff' : '#157efb'} style={{ marginRight: 6 }} />
+                  <Text style={[styles.chipText, reminderDate ? { color: '#fff' } : { color: '#157efb' }]} numberOfLines={1}>
+                    {reminderDate ? reminderDate.toLocaleDateString() + ', ' + reminderDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Reminder'}
                   </Text>
                   {reminderDate && (
-                    <TouchableOpacity
-                      onPress={() => setReminderDate(null)}
-                      accessibilityRole="button"
-                      accessibilityLabel="Clear reminder"
-                      style={styles.clearIcon}
-                      hitSlop={8}
-                    >
-                      <Ionicons name="close-circle" size={18} color="#e44" />
+                    <TouchableOpacity onPress={() => { setReminderDate(null); Haptics.selectionAsync(); }} style={styles.clearIcon} accessibilityLabel="Clear reminder" accessibilityRole="button" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Ionicons name="close" size={16} color="#fff" />
                     </TouchableOpacity>
                   )}
                 </TouchableOpacity>
               </View>
+
               {showDueDatePicker && (
-                <DateTimePicker
-                  value={pendingDueDate}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={handleDueDateChange}
-                  minimumDate={new Date()}
-                />
+                <DateTimePicker value={pendingDueDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} minimumDate={new Date()} onChange={onDueDateChange} />
               )}
               {showDueTimePicker && (
-                <DateTimePicker
-                  value={pendingDueDate}
-                  mode="time"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={handleDueTimeChange}
-                />
+                <DateTimePicker value={pendingDueDate} mode="time" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onDueTimeChange} />
               )}
               {showReminderDatePicker && (
-                <DateTimePicker
-                  value={pendingReminderDate}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={handleReminderDateChange}
-                  minimumDate={new Date()}
-                />
+                <DateTimePicker value={pendingReminderDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} minimumDate={new Date()} onChange={onReminderDateChange} />
               )}
               {showReminderTimePicker && (
-                <DateTimePicker
-                  value={pendingReminderDate}
-                  mode="time"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={handleReminderTimeChange}
-                />
+                <DateTimePicker value={pendingReminderDate} mode="time" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onReminderTimeChange} />
               )}
 
-              {/* Inline Tag Selector */}
               <TagSelector tags={tags} setTags={setTags} />
 
-              <View style={[styles.section, { marginBottom: 0, marginTop: 0 }]}>
-                <Text style={styles.label}>Repeat:</Text>
+              {/* Repetition */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Repeat</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.repetitionContainer}>
-                  {REPETITION_OPTIONS.map(option => {
-                    const selected = option === repetition;
+                  {REPETITION_OPTIONS.map((r) => {
+                    const active = repetition === r;
                     return (
                       <TouchableOpacity
-                        key={option}
+                        key={r}
                         onPress={() => {
+                          setRepetition(r as any);
                           Haptics.selectionAsync();
-                          setRepetition(option);
                         }}
-                        style={[styles.repetitionOption, selected && styles.repetitionSelected]}
+                        style={[styles.chip, active && styles.chipActive]}
                         accessibilityRole="radio"
-                        accessibilityState={{ selected }}
-                        accessibilityLabel={`Repeat ${option}`}
+                        accessibilityState={{ selected: active }}
                       >
-                        <Text style={[styles.repetitionText, selected && styles.repetitionTextSelected]}>
-                          {option}
+                        <Text
+                          style={[
+                            styles.chipText,
+                            active ? styles.chipTextActive : null,
+                          ]}
+                        >
+                          {r}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -418,23 +309,13 @@ export default function AddTaskModal({ visible, onClose, onSave }) {
                 </ScrollView>
               </View>
 
-              {/* Save/Cancel Buttons */}
+              {/* Save and Cancel buttons */}
               <View style={styles.buttonsRow}>
-                <TouchableOpacity
-                  onPress={() => { resetForm(); onClose(); }}
-                  style={[styles.button, styles.cancelButton]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel adding task"
-                >
-                  <Text style={[styles.buttonText, styles.cancelButtonText]}>Cancel</Text>
+                <TouchableOpacity onPress={handleCancel} style={[styles.button, styles.cancelButton]}>
+                  <Text style={[styles.buttonText, styles.cancelText]}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleSave}
-                  style={[styles.button, styles.saveButton]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Save task"
-                >
-                  <Text style={[styles.buttonText, styles.saveButtonText]}>Save</Text>
+                <TouchableOpacity onPress={handleSave} style={[styles.button, styles.saveButton]} disabled={loading}>
+                  {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={[styles.buttonText, styles.saveText]}>Save</Text>}
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -445,189 +326,73 @@ export default function AddTaskModal({ visible, onClose, onSave }) {
   );
 }
 
-const CHIP_H = 27;
+const CHIP_HEIGHT = 28;
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.33)',
+    backgroundColor: 'rgba(0,0,0,0.37)',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 20,
   },
   modalContainer: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 14,
+    padding: 18,
+    maxHeight: '85%',
     elevation: 14,
-    maxHeight: '87%',
     shadowColor: '#157efb',
     shadowOpacity: 0.23,
-    shadowOffset: { width: 0, height: 4 },
     shadowRadius: 13,
+    shadowOffset: { width: 0, height: 4 },
     minWidth: 320,
   },
   title: {
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: 10,
+    marginBottom: 12,
     color: '#157efb',
     textAlign: 'center',
   },
   input: {
     borderWidth: 1,
     borderColor: '#157efb',
-    borderRadius: 10,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    fontSize: 15,
-    marginBottom: 7,
-    color: '#232',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#f6faff',
+    color: '#111',
+    marginBottom: 6,
   },
   multilineInput: {
-    height: 58,
-    marginBottom: 8,
+    height: 70,
+    textAlignVertical: 'top',
   },
-  inputError: {
-    borderColor: '#e44',
+  errorInput: {
+    borderColor: '#d23d3d',
   },
   errorText: {
-    color: '#e44',
-    fontWeight: '600',
+    color: '#d23d3d',
     fontSize: 13,
-    marginBottom: 3,
+    marginBottom: 6,
   },
   rowCompact: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    marginBottom: 13,
-  },
-  chipBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 18,
-    backgroundColor: '#f6f9fe',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: '#d5e5fa',
-    minHeight: 33,
-    marginRight: 5,
-  },
-  chipBtnActive: {
-    backgroundColor: '#eaf3fe',
-    borderColor: '#157efb',
-  },
-  chipBtnText: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '600',
-    flexShrink: 1,
-  },
-  clearIcon: {
-    marginLeft: 7,
-  },
-  section: {
-    marginBottom: 11,
-  },
-  label: {
-    fontWeight: '600',
-    fontSize: 14,
-    color: '#157efb',
-    marginBottom: 4,
-  },
-  repetitionContainer: {
-    flexDirection: 'row',
-    gap: 0,
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  repetitionOption: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1.3,
-    borderColor: '#157efb',
-    marginRight: 7,
-    marginTop: 0,
-    backgroundColor: '#f7faff',
-  },
-  repetitionSelected: {
-    backgroundColor: '#157efb',
-  },
-  repetitionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#157efb',
-  },
-  repetitionTextSelected: {
-    color: '#fff',
-  },
-  buttonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    gap: 6,
-  },
-  button: {
-    flex: 1,
-    borderRadius: 40,
-    paddingVertical: 11,
-    alignItems: 'center',
-    marginHorizontal: 0,
-    elevation: 3,
-    shadowColor: '#157efb',
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-  },
-  cancelButton: {
-    backgroundColor: '#eff2f8',
-    shadowOpacity: 0,
-    marginRight: 6,
-  },
-  cancelButtonText: {
-    color: '#555',
-  },
-  saveButton: {
-    backgroundColor: '#157efb',
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-});
-
-// Tag selector styles
-const addTagStyles = StyleSheet.create({
-  label: {
-    fontWeight: '600',
-    fontSize: 14,
-    marginBottom: 4,
-    color: '#157efb',
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 7,
+    gap: 10,
+    marginBottom: 14,
   },
   chip: {
-    backgroundColor: '#f4f8fd',
-    borderRadius: 16,
-    paddingVertical: 5,
-    paddingHorizontal: 13,
-    marginRight: 6,
-    marginTop: 7,
-    minWidth: 38,
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    height: 27,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#e0eafc',
+    borderColor: '#d1d9ef',
+    backgroundColor: '#f6faff',
+    minHeight: CHIP_HEIGHT,
   },
   chipActive: {
     backgroundColor: '#157efb',
@@ -636,42 +401,57 @@ const addTagStyles = StyleSheet.create({
   chipText: {
     color: '#157efb',
     fontWeight: '600',
-    fontSize: 13,
-    maxWidth: 74,
+    fontSize: 15,
+    flexShrink: 1,
   },
   chipTextActive: {
     color: '#fff',
   },
-  addChip: {
-    backgroundColor: '#eaf3fe',
-    borderColor: '#b2d0f9',
-    marginLeft: 3,
-    minWidth: 27,
-    paddingHorizontal: 9,
+  clearIcon: {
+    marginLeft: 10,
+  },
+  section: {
+    marginVertical: 14,
+  },
+  label: {
+    fontWeight: '600',
+    color: '#157efb',
+    fontSize: 15,
+    marginBottom: 6,
+  },
+  repetitionContainer: {
+    flexDirection: 'row',
+  },
+  buttonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 30,
+  },
+  button: {
+    flex: 1,
+    borderRadius: 40,
+    paddingVertical: 18,
     alignItems: 'center',
-    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#157efb',
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
-  tagInput: {
-    minWidth: 68,
-    paddingHorizontal: 8,
-    fontSize: 13,
-    backgroundColor: '#f6faff',
-    color: '#222',
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: '#b3ccf5',
-    alignSelf: 'center',
-    marginLeft: 7,
-    height: 27,
-    marginTop: 7,
+  cancelButton: {
+    backgroundColor: '#f0f4ff',
   },
-  removeIcon: {
-    marginLeft: 6,
-    borderRadius: 11,
+  saveButton: {
     backgroundColor: '#157efb',
-    width: 15,
-    height: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  buttonText: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  cancelText: {
+    color: '#157efb',
+  },
+  saveText: {
+    color: '#fff',
   },
 });
