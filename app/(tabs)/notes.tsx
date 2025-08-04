@@ -10,7 +10,7 @@ import emptyNotesLottie from '@/assets/lottie/Empty.json';
 const PRIMARY = '#157efb';
 
 export default function NotesScreen() {
-  const [notes, setNotes] = useState([]); // Empty list shows empty state
+  const [notes] = useState([]); // Empty list shows empty state
 
   const handleAddNote = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -30,7 +30,7 @@ export default function NotesScreen() {
       />
       <Text style={styles.emptyTitle}>No notes yet</Text>
       <Text style={styles.emptyDesc}>
-        You haven't added any notes. Tap "Add Note" to get started!
+        You haven&apos;t added any notes. Tap &quot;Add Note&quot; to get started!
       </Text>
     </View>
   );
