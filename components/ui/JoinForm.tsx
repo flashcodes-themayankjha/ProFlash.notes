@@ -51,7 +51,7 @@ const Login = () => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [opacity, translateY]);
 
   const {
     control,
@@ -85,7 +85,7 @@ const Login = () => {
 
       // On success, route to main app
       router.replace('/');
-    } catch (error: any) {
+    } catch {
       setFormError('Unexpected error. Please try again.');
     }
   };
@@ -284,7 +284,7 @@ const Login = () => {
 
             <View style={styles.signupPrompt}>
               <Text>
-                Don't have an account?{' '}
+                Don&apos;t have an account?{' '}
                 <Text
                   style={styles.signupLink}
                   onPress={() => {
