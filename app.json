@@ -4,7 +4,7 @@
     "slug": "ProFlash",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/adaptive-icon.png",
+    "icon": "./assets/images/android.png",
     "scheme": "proflash",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -12,11 +12,16 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.ProFlash",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false }
+        "ITSAppUsesNonExemptEncryption": false },
+        "splash": {
+    "image": "./assets/images/splash-dark.png",
+    "resizeMode": "contain",
+    "backgroundColor": "#ffffff"
+  }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/android.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
