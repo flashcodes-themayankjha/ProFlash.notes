@@ -22,6 +22,7 @@ import LottieView from 'lottie-react-native';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase'; // Your Supabase client
 import joinLottie from '@/assets/lottie/Login.json';
+import * as Linking from 'expo-linking';
 
 interface LoginFormData {
   email: string;
@@ -93,12 +94,19 @@ const Login = () => {
   const handleSocialLogin = async (provider: 'google' | 'github' | 'apple') => {
     if (Platform.OS !== 'web') await Haptics.selectionAsync();
 
-    const message = `[Social Login] ${provider} login - Integration pending.`;
-
-    if (Platform.OS === 'android') {
-      ToastAndroid.show(message, ToastAndroid.SHORT);
-    } else {
-      console.log(message);
+    try {
+      const redirectTo = Linking.createURL('auth/callback');
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo }
+      });
+      if (error) {
+        setFormError(error.message);
+      } else {
+        router.replace('/');
+      }
+    } catch (error: any) {
+      setFormError(`Authentication error: ${error.message}`);
     }
   };
 

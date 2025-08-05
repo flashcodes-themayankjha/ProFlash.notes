@@ -1,529 +1,381 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
   TextInput,
-  StyleSheet,
-  SafeAreaView,
-  Animated,
-  Easing,
-  Platform,
-  KeyboardAvoidingView,
-  ScrollView,
-  Pressable,
   TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
-import LottieView from 'lottie-react-native';
-import * as Haptics from 'expo-haptics';
-import { Checkbox } from 'expo-checkbox';
-import { useForm, Controller } from 'react-hook-form';
-import { AntDesign, FontAwesome, Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import * as Linking from 'expo-linking';
-import { supabase } from '@/lib/supabase';
+  Modal,
+  StyleSheet,
+  Switch,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Image,
+} from "react-native";
+import { Feather } from "@expo/vector-icons";
 
-import joinLottie from '@/assets/lottie/Signup.json';
+// --- Types ---
+type EventStatus = "In Progress" | "Done" | "Review";
 
-const MAX_INPUT_WIDTH = 320;
-const BACKGROUND_COLOR = '#fff';
+interface AddEventPopupProps {
+  visible: boolean;
+  onClose: () => void;
+  onSave: (event: {
+    id: string;
+    title: string;
+    note: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    color: string;
+    status: EventStatus;
+    alarm: boolean;
+  }) => void;
+}
 
-type SignupFormData = {
-  fullName: string;
-  email: string;
-  password: string;
-  keepSignedIn: boolean;
-};
+const PROFILE_AVATAR =
+  "https://randomuser.me/api/portraits/men/12.jpg"; // Replace with real user's avatar if needed
+const COLOR_OPTIONS = ["#50e4a6", "#fe95a0", "#e5ad8f"];
 
-type Props = {
-  onSubmitSuccess?: () => void;
-  onBack?: () => void;
-};
+// --- Component ---
+const AddEventPopup: React.FC<AddEventPopupProps> = ({
+  visible,
+  onClose,
+  onSave,
+}) => {
+  // State
+  const [title, setTitle] = useState("");
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [color, setColor] = useState(COLOR_OPTIONS[0]);
+  const [alarm, setAlarm] = useState(false);
 
-const AnimatedPressable: React.FC<{
-  onPress: () => void;
-  accessibilityLabel?: string;
-  style?: any;
-  disabled?: boolean;
-  children: React.ReactNode;
-}> = ({ onPress, accessibilityLabel, style, disabled, children }) => {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const animateIn = () => {
-    Animated.spring(scale, {
-      toValue: 0.93,
-      friction: 5,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const animateOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      friction: 5,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePress = () => {
-    if (!disabled && Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    if (!disabled) {
-      onPress();
-    }
-  };
-
-  return (
-    <Pressable
-      onPressIn={animateIn}
-      onPressOut={animateOut}
-      onPress={handlePress}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={style}
-      disabled={disabled}
-    >
-      <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>
-    </Pressable>
-  );
-};
-
-const SignupForm: React.FC<Props> = ({ onSubmitSuccess, onBack }) => {
-  const router = useRouter();
-  const [passwordVisible, setPasswordVisible] = useState(false);
-  const [focusedInput, setFocusedInput] = useState<string | null>(null);
-  const [socialLoading, setSocialLoading] = useState<'google' | 'github' | 'apple' | null>(null);
-
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(24)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 600,
-        easing: Easing.out(Easing.exp),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [opacity, translateY]);
-
-  const { control, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<SignupFormData>({
-    defaultValues: {
-      fullName: '',
-      email: '',
-      password: '',
-      keepSignedIn: true,
-    },
-  });
-
-  const onSubmit = handleSubmit(async (data) => {
-    try {
-      if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const { error } = await supabase.auth.signUp(
-        { email: data.email, password: data.password },
-        { data: { full_name: data.fullName } }
-      );
-      if (error) {
-        setError('email', { type: 'manual', message: error.message });
-        return;
-      }
-      alert('Account created successfully! Please verify your email before logging in.');
-      onSubmitSuccess?.();
-      router.replace('/login');
-    } catch {
-      setError('email', { type: 'manual', message: 'An unexpected error occurred.' });
-    }
-  });
-
-  const inputStyle = (field: string) => [
-    styles.input,
-    focusedInput === field && styles.inputFocused,
-    errors[field as keyof SignupFormData] && styles.inputError,
-  ];
-
-  const onBackPress = () => {
-    if (onBack) onBack();
-    else router.replace('/onboard');
-  };
-
-  // --- REAL SOCIAL LOGIN (Google, GitHub, Apple) ---
-  const handleSocialLogin = async (provider: 'google' | 'apple' | 'github') => {
-    if (Platform.OS !== 'web') await Haptics.selectionAsync();
-    setSocialLoading(provider);
-    try {
-      const redirectTo = Linking.createURL('auth/callback');
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo }
+  // Handlers
+  function handleSave() {
+    if (title.trim()) {
+      onSave({
+        id: Date.now().toString(),
+        title,
+        note,
+        date,
+        startTime,
+        endTime,
+        color,
+        status: "In Progress",
+        alarm,
       });
-      if (error) {
-        alert(error.message);
-      }
-      // Supabase will handle the redirect/session automatically!
-    } catch {
-      alert('Authentication error. Please try again.');
-    } finally {
-      setSocialLoading(null);
+      setTitle("");
+      setNote("");
+      setDate("");
+      setStartTime("");
+      setEndTime("");
+      setColor(COLOR_OPTIONS[0]);
+      setAlarm(false);
+      onClose();
     }
-  };
+  }
 
+  // --- UI ---
   return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* Back Arrow */}
-      <AnimatedPressable onPress={onBackPress} accessibilityLabel="Go back to onboarding" style={styles.backButton}>
-        <AntDesign name="arrowleft" size={28} color="#222B2B" />
-      </AnimatedPressable>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
-      >
-        <ScrollView
-          contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 120 }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={styles.modalMask}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.centered}
         >
-          <Animated.View style={[styles.formBody, { opacity, transform: [{ translateY }] }]}>
-            <View style={styles.lottieContainer}>
-              <LottieView source={joinLottie} autoPlay loop resizeMode="contain" style={styles.lottie} accessibilityRole="image" />
+          <View style={styles.card}>
+            {/* Header Row */}
+            <View style={styles.headerRow}>
+              <Pressable onPress={onClose} hitSlop={16}>
+                <Feather name="x" size={26} color="#fff" />
+              </Pressable>
+              <Text style={styles.headerTitle}>Title</Text>
+              <Image
+                source={{ uri: PROFILE_AVATAR }}
+                style={styles.avatar}
+                accessibilityLabel="User avatar"
+              />
             </View>
-
-            <Text style={styles.title}>Create your account</Text>
-            <Text style={styles.subtitle}>Join ProFlash and boost your productivity</Text>
-
-            <Animated.View style={{ opacity }}>
-              {/* Full Name */}
-              <Controller
-                control={control}
-                name="fullName"
-                rules={{ required: 'Full name is required.' }}
-                render={({ field: { onChange, value } }) => (
-                  <TextInput
-                    style={inputStyle('fullName')}
-                    placeholder="Full Name"
-                    placeholderTextColor="#93a1b0"
-                    autoCapitalize="words"
-                    value={value}
-                    onChangeText={onChange}
-                    onFocus={() => setFocusedInput('fullName')}
-                    onBlur={() => setFocusedInput(null)}
-                    accessible
-                    accessibilityLabel="Full name input"
-                  />
-                )}
+            {/* Title Field */}
+            <TextInput
+              style={styles.inputTitle}
+              placeholder="UI Design for Dribbble"
+              value={title}
+              onChangeText={setTitle}
+              placeholderTextColor="#b7d3ef"
+              autoFocus
+              selectionColor="#157efb"
+            />
+            {/* Date/Time Row */}
+            <View style={styles.dateTimeRow}>
+              <TextInput
+                style={styles.inputDate}
+                placeholder="06"
+                value={date}
+                onChangeText={setDate}
+                placeholderTextColor="#bbc7e7"
+                keyboardType="number-pad"
+                maxLength={2}
               />
-              {errors.fullName && <Text style={styles.error}>{errors.fullName.message}</Text>}
-            </Animated.View>
-
-            <Animated.View style={{ opacity }}>
-              {/* Email */}
-              <Controller
-                control={control}
-                name="email"
-                rules={{
-                  required: 'Email is required.',
-                  pattern: { value: /\S+@\S+\.\S+/, message: 'Invalid email address.' },
-                }}
-                render={({ field: { onChange, value } }) => (
-                  <TextInput
-                    style={inputStyle('email')}
-                    placeholder="Email"
-                    placeholderTextColor="#93a1b0"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    value={value}
-                    onChangeText={onChange}
-                    onFocus={() => setFocusedInput('email')}
-                    onBlur={() => setFocusedInput(null)}
-                    accessible
-                    accessibilityLabel="Email input"
-                  />
-                )}
+              <Text style={styles.labelDate}>/</Text>
+              <TextInput
+                style={styles.inputDate}
+                placeholder="09"
+                value=""
+                editable={false}
+                placeholderTextColor="#bbc7e7"
               />
-              {errors.email && <Text style={styles.error}>{errors.email.message}</Text>}
-            </Animated.View>
-
-            <Animated.View style={{ opacity }}>
-              {/* Password */}
-              <Controller
-                control={control}
-                name="password"
-                rules={{
-                  required: 'Password is required.',
-                  minLength: { value: 6, message: 'Please enter at least 6 characters.' },
-                }}
-                render={({ field: { onChange, value } }) => (
-                  <View style={styles.passwordRow}>
-                    <TextInput
-                      style={[inputStyle('password'), styles.inputPassword]}
-                      placeholder="Password"
-                      placeholderTextColor="#93a1b0"
-                      autoCapitalize="none"
-                      secureTextEntry={!passwordVisible}
-                      value={value}
-                      onChangeText={onChange}
-                      onFocus={() => setFocusedInput('password')}
-                      onBlur={() => setFocusedInput(null)}
-                      accessible
-                      accessibilityLabel="Password input"
-                    />
-                    <TouchableOpacity
-                      style={styles.eyeIcon}
-                      onPress={() => setPasswordVisible(v => !v)}
-                      accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name={passwordVisible ? 'eye' : 'eye-off'} size={22} color="#999" />
-                    </TouchableOpacity>
-                  </View>
-                )}
+              <Text style={styles.labelDate}>/</Text>
+              <Text style={[styles.inputDate, { color: "#bfccea" }]}>2025</Text>
+              <View style={{ width: 18 }} />
+              {/* Time */}
+              <TextInput
+                style={styles.inputTime}
+                placeholder="10"
+                value={startTime}
+                onChangeText={setStartTime}
+                placeholderTextColor="#bbc7e7"
+                maxLength={2}
+                keyboardType="number-pad"
               />
-              {errors.password && <Text style={styles.error}>{errors.password.message}</Text>}
-            </Animated.View>
-
-            <Animated.View style={{ opacity }}>
-              <View style={styles.checkboxRow}>
-                <Controller
-                  control={control}
-                  name="keepSignedIn"
-                  render={({ field: { value, onChange } }) => (
-                    <>
-                      <Checkbox
-                        value={value}
-                        onValueChange={onChange}
-                        color="#1570ef"
-                        style={styles.checkbox}
-                        accessibilityLabel="Keep me signed in"
-                        accessible
-                      />
-                      <Text style={styles.checkboxLabel}>Keep me signed in</Text>
-                    </>
-                  )}
+              <Text style={styles.labelDate}>:</Text>
+              <TextInput
+                style={styles.inputTime}
+                placeholder="43"
+                value={endTime}
+                onChangeText={setEndTime}
+                placeholderTextColor="#bbc7e7"
+                maxLength={2}
+                keyboardType="number-pad"
+              />
+              <Text style={styles.labelAMPM}>AM</Text>
+            </View>
+            {/* Note Field */}
+            <TextInput
+              style={styles.inputNote}
+              placeholder="Write your important note"
+              placeholderTextColor="#b7d3ef"
+              value={note}
+              onChangeText={setNote}
+              multiline
+            />
+            {/* Color and Alarm */}
+            <View style={styles.colorAlarmRow}>
+              {/* Colors */}
+              <Text style={styles.colorLabel}>Color</Text>
+              {COLOR_OPTIONS.map((clr) => (
+                <TouchableOpacity
+                  key={clr}
+                  style={[
+                    styles.colorDot,
+                    { backgroundColor: clr, borderWidth: clr === color ? 2 : 0 },
+                  ]}
+                  onPress={() => setColor(clr)}
                 />
-              </View>
-            </Animated.View>
-
-            <AnimatedPressable onPress={onSubmit} style={styles.joinButton} accessibilityLabel="Create account" disabled={isSubmitting}>
-              <Text style={styles.joinButtonText}>
-                {isSubmitting ? 'Signing up...' : 'Sign Up'}
-              </Text>
-            </AnimatedPressable>
-
-            <Text style={styles.socialSeparator}>or continue with</Text>
-
-            <Animated.View style={{ opacity }}>
-              <View style={styles.socialRow}>
-                <AnimatedPressable
-                  onPress={() => handleSocialLogin('google')}
-                  accessibilityLabel="Sign up with Google"
-                  style={styles.socialButton}
-                  disabled={socialLoading !== null}
-                >
-                  {socialLoading === 'google'
-                    ? <ActivityIndicator color="#EA4335" />
-                    : <AntDesign name="google" size={28} color="#EA4335" />
-                  }
-                </AnimatedPressable>
-
-                <AnimatedPressable
-                  onPress={() => handleSocialLogin('github')}
-                  accessibilityLabel="Sign up with GitHub"
-                  style={styles.socialButton}
-                  disabled={socialLoading !== null}
-                >
-                  {socialLoading === 'github'
-                    ? <ActivityIndicator color="#171515" />
-                    : <AntDesign name="github" size={28} color="#171515" />
-                  }
-                </AnimatedPressable>
-                {Platform.OS === 'ios' && (
-                  <AnimatedPressable
-                    onPress={() => handleSocialLogin('apple')}
-                    accessibilityLabel="Sign up with Apple"
-                    style={styles.socialButton}
-                    disabled={socialLoading !== null}
-                  >
-                    {socialLoading === 'apple'
-                      ? <ActivityIndicator color="#000" />
-                      : <FontAwesome name="apple" size={28} color="#000" />
-                    }
-                  </AnimatedPressable>
-                )}
-              </View>
-            </Animated.View>
-          </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+              ))}
+              <View style={{ flex: 1 }} />
+              {/* Alarm */}
+              <Text style={styles.colorLabel}>Alarm</Text>
+              <Switch
+                value={alarm}
+                onValueChange={setAlarm}
+                thumbColor={alarm ? "#fe95a0" : "#eee"}
+                ios_backgroundColor="#eee"
+                trackColor={{ false: "#e7eaf3", true: "#fdc8d3" }}
+              />
+            </View>
+            {/* Save Button */}
+            <View style={styles.saveBtnWrap}>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={handleSave}
+                accessibilityLabel="Save event"
+                activeOpacity={0.92}
+              >
+                <Text style={styles.saveBtnText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
   );
 };
+
+export default AddEventPopup;
+
+// --- Styles ---
+const BLUR = "#f9fbfe";
+const BLUE = "#157efb";
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: BACKGROUND_COLOR },
-  backButton: {
-    position: 'absolute',
-    top: Platform.OS === 'android' ? 36 : 52,
-    left: 14,
-    zIndex: 99,
-    backgroundColor: BACKGROUND_COLOR,
-    borderRadius: 22,
-    padding: 3,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingTop: 24,
-    paddingHorizontal: 18,
-    paddingBottom: 120,
-    justifyContent: 'flex-start',
-  },
-  formBody: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  lottieContainer: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  lottie: {
-    width: MAX_INPUT_WIDTH,
-    height: MAX_INPUT_WIDTH,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#222B2B',
-    letterSpacing: 1,
-    marginBottom: 5,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1570ef',
-    marginBottom: 18,
-    letterSpacing: 0.13,
-    textAlign: 'center',
-  },
-  input: {
-    width: MAX_INPUT_WIDTH,
-    borderWidth: 1.2,
-    borderColor: '#d4dbe4',
-    borderRadius: 9,
-    paddingVertical: 13,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    marginBottom: 9,
-    backgroundColor: '#f6faff',
-    color: '#11181a',
-  },
-  inputFocused: {
-    borderColor: '#1570ef',
-    borderWidth: 2,
-    backgroundColor: '#e6f0ff',
-  },
-  inputError: {
-    borderColor: '#e53935',
-    backgroundColor: '#fff2f2',
-  },
-  passwordRow: {
-    width: MAX_INPUT_WIDTH,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 9,
-  },
-
-  inputPassword: {
+  modalMask: {
     flex: 1,
-    marginRight: 8,
+    backgroundColor: "rgba(35,48,75,0.22)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  eyeIcon: {
-    padding: 6,
+  centered: { width: "100%", alignItems: "center" },
+  card: {
+    width: "90%",
+    backgroundColor: "#fff",
+    borderRadius: 25,
+    padding: 0,
+    shadowColor: "#314b85",
+    shadowOpacity: 0.11,
+    shadowRadius: 26,
+    shadowOffset: { width: 2, height: 6 },
+    elevation: 14,
+    overflow: "hidden",
   },
-  checkboxRow: {
-    width: '100%',
-    maxWidth: MAX_INPUT_WIDTH,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    justifyContent: 'center',
-    alignSelf: 'center',
-  },
-  checkbox: {
-    marginRight: 8,
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderColor: '#a0aec0',
-    borderWidth: 1,
-  },
-  checkboxLabel: {
-    fontSize: 15,
-    color: '#222B2B',
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  joinButton: {
-    width: '100%',
-    maxWidth: MAX_INPUT_WIDTH,
-    alignSelf: 'center',
-    backgroundColor: '#1570ef',
-    borderRadius: 22,
+  // Header
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: BLUE,
+    paddingHorizontal: 20,
     paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#1570ef',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 7,
-    elevation: 7,
+    borderTopRightRadius: 24,
+    borderTopLeftRadius: 24,
+    marginBottom: 10,
   },
-  joinButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 18,
-    letterSpacing: 0.5,
+  headerTitle: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 20,
+    flex: 1,
+    textAlign: "center",
+    letterSpacing: 0.2,
   },
-  socialSeparator: {
-    color: '#b3b6bc',
-    fontWeight: '500',
-    fontSize: 13.5,
-    marginTop: 10,
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#d1e6fc",
+    marginLeft: 12,
+  },
+  // Title input
+  inputTitle: {
+    backgroundColor: BLUR,
+    marginHorizontal: 24,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     marginBottom: 14,
-    letterSpacing: 0.08,
-    textAlign: 'center',
+    fontSize: 16,
+    color: "#222",
+    fontWeight: "600",
+    borderWidth: 1.25,
+    borderColor: "#e5eaf5",
   },
-  socialRow: {
-    width: '100%',
-    maxWidth: MAX_INPUT_WIDTH,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 18,
+  // Date/time
+  dateTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+    marginHorizontal: 24,
   },
-  socialButton: {
-    backgroundColor: BACKGROUND_COLOR,
-    borderRadius: 999,
-    padding: 12,
-    marginHorizontal: 4,
+  inputDate: {
+    fontWeight: "bold",
+    fontSize: 17,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: "#f8fafd",
+    borderRadius: 7,
+    minWidth: 40,
+    color: "#157efb",
     borderWidth: 1.1,
-    borderColor: BACKGROUND_COLOR,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#e3eaf5",
+    textAlign: "center",
+    marginHorizontal: 2,
   },
-  error: {
-    color: '#e53935',
-    marginBottom: 4,
-    fontSize: 13,
+  inputTime: {
+    backgroundColor: "#f8fafd",
+    borderRadius: 7,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    fontSize: 16,
+    color: "#365fe9",
+    fontWeight: "600",
+    minWidth: 35,
+    textAlign: "center",
+    borderWidth: 1.1,
+    borderColor: "#e3eaf5",
+    marginHorizontal: 2,
+  },
+  labelDate: { color: "#bfccea", fontSize: 20, marginHorizontal: 1, fontWeight: "600" },
+  labelAMPM: {
     marginLeft: 4,
-    alignSelf: 'flex-start',
-    maxWidth: MAX_INPUT_WIDTH,
+    fontWeight: "bold",
+    color: "#157efb",
+    fontSize: 17,
+    backgroundColor: "#eef3fe",
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
+  // Note input
+  inputNote: {
+    backgroundColor: "#f2f6fc",
+    marginHorizontal: 24,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingTop: 14,
+    paddingBottom: 28,
+    fontSize: 15,
+    color: "#414753",
+    marginBottom: 19,
+    borderWidth: 1,
+    borderColor: "#ebeff9",
+    height: 58,
+    textAlignVertical: "top",
+  },
+  // Color & alarm row
+  colorAlarmRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 24,
+    marginBottom: 18,
+  },
+  colorLabel: {
+    color: "#6d7691",
+    fontWeight: "600",
+    fontSize: 15,
+    marginRight: 9,
+  },
+  colorDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    marginHorizontal: 3,
+    borderColor: "#157efb",
+  },
+  // Save button
+  saveBtnWrap: {
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  saveBtn: {
+    width: 140,
+    backgroundColor: "#fe95a0",
+    borderRadius: 14,
+    alignItems: "center",
+    paddingVertical: 13,
+    shadowColor: "#fdbaae",
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 18, letterSpacing: 0.6 },
 });
 
-export default SignupForm;
