@@ -15,7 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Task } from '../lib/supabaseTasks';
 import * as Haptics from 'expo-haptics';
-import TagSelector from './TagSelector';
+import { Colors } from '../constants/Colors';
+
+const C = Colors.calendar;
 
 const REPETITION_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly'];
 
@@ -210,7 +212,7 @@ const styles = StyleSheet.create({
   },
   modalView: {
     margin: 20,
-    backgroundColor: 'white',
+    backgroundColor: C.white,
     borderRadius: 20,
     padding: 25,
     width: '90%',
@@ -235,7 +237,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: C.text,
   },
   closeButton: {
     padding: 5,
@@ -247,16 +249,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#555',
+    color: C.text,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: C.separator,
     borderRadius: 8,
     padding: 12,
     marginBottom: 15,
     fontSize: 16,
-    color: '#333',
+    color: C.text,
   },
   textArea: {
     minHeight: 100,
@@ -267,17 +269,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: C.separator,
     borderRadius: 8,
     padding: 12,
     marginBottom: 15,
   },
   datePickerButtonText: {
     fontSize: 16,
-    color: '#333',
+    color: C.text,
   },
   saveButton: {
-    backgroundColor: '#157efb',
+    backgroundColor: C.blue,
     borderRadius: 10,
     padding: 15,
     marginTop: 20,
@@ -285,7 +287,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonText: {
-    color: 'white',
+    color: C.white,
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -300,22 +302,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#d0d6ea',
-    backgroundColor: '#f6faff',
+    borderColor: C.separator,
+    backgroundColor: C.card,
     marginRight: 6,
     marginBottom: 6,
   },
   chipActive: {
-    backgroundColor: '#157efb',
-    borderColor: '#157efb',
+    backgroundColor: C.blue,
+    borderColor: C.blue,
   },
   chipText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#157efb',
+    color: C.blue,
   },
   chipTextActive: {
-    color: '#fff',
+    color: C.white,
   },
 });
 
