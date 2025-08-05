@@ -23,4 +23,18 @@ export const Colors = {
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
   },
+  calendar: {
+    blue: '#29406c',
+    coral: '#fe95a0',
+    done: '#3ec28f',
+    inProgress: '#fe95a0',
+    blur: '#f9fbfe',
+    background: '#f7f7fa',
+    text: '#374771',
+    subtext: '#a1aec4',
+    highlight: '#f69c51',
+    separator: '#d3d8ec',
+    card: '#f7f7fa',
+    white: '#fff',
+  }
 };
